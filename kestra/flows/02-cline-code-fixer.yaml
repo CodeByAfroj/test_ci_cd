@@ -1,0 +1,219 @@
+id: gemini-code-fixer
+namespace: company.self-healing
+
+inputs:
+  - id: repository
+    type: STRING
+  - id: branch
+    type: STRING
+  - id: github_token
+    type: STRING
+  - id: gemini_api_key
+    type: STRING
+  - id: rca_json
+    type: STRING
+  - id: parent_execution_id
+    type: STRING
+    defaults: ""
+  - id: error_logs
+    type: STRING
+    defaults: ""
+
+tasks:
+  # -------------------------------------------------------------
+  # 1. CLONE + AGENTIC CODE FIX (Simulating Cline)
+  # -------------------------------------------------------------
+  - id: clone_and_fix
+    type: io.kestra.plugin.scripts.python.Script
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      image: python:3.11
+      networkMode: host
+    beforeCommands:
+      - pip install google-generativeai
+    # ✅ FIX: Pass JSON via Environment Variable to prevent parsing errors
+    env:
+      RCA_JSON_INPUT: "{{ inputs.rca_json }}"
+      REPO: "{{ inputs.repository }}"
+      BRANCH: "{{ inputs.branch }}"
+      TOKEN: "{{ inputs.github_token }}"
+      GEMINI_KEY: "{{ inputs.gemini_api_key }}"
+    outputFiles:
+      - fix_result.json
+    script: |
+      import os, subprocess, json, sys, time, re
+      import google.generativeai as genai
+
+      # 1. Load Inputs from Env
+      REPO = os.getenv('REPO')
+      BRANCH = os.getenv('BRANCH')
+      TOKEN = os.getenv('TOKEN')
+      GEMINI_KEY = os.getenv('GEMINI_KEY')
+
+      if not TOKEN or len(TOKEN) < 10:
+          print("❌ Error: GitHub Token is missing or invalid!")
+          sys.exit(1)
+
+      # 2. Parse RCA JSON safely
+      raw_rca = os.getenv('RCA_JSON_INPUT', '{}')
+      print(f"🔍 DEBUG: Raw RCA Input length: {len(raw_rca)}")
+
+      try:
+          RCA = json.loads(raw_rca)
+      except Exception as e:
+          print(f"❌ Error: Could not parse RCA JSON input. Error: {e}")
+          print(f"Dump of input: {raw_rca[:500]}...") # Print start of input to debug
+          sys.exit(1)
+
+      # 3. Configure Git
+      subprocess.call(["git", "config", "--global", "user.email", "bot@kestra.io"])
+      subprocess.call(["git", "config", "--global", "user.name", "Self-Healing Bot"])
+
+      print(f"📥 Cloning {REPO}...")
+      git_url = f"https://x-access-token:{TOKEN}@github.com/{REPO}.git"
+      clone_cmd = ["git", "clone", git_url, "--branch", BRANCH, "--single-branch", "repo"]
+
+      if subprocess.call(clone_cmd) != 0:
+          print("❌ Clone failed! Check your Repo URL and Token.")
+          sys.exit(0)
+
+      # 4. Locate Target File
+      target_file = RCA.get("target_file")
+
+      # SAFETY: Stop if no target file is defined
+      if not target_file or target_file == "None":
+           print("❌ Error: No target file identified. Cannot proceed.")
+           # Write failure result so flow finishes gracefully
+           with open("fix_result.json", "w") as f:
+               json.dump({"fix_successful": False, "last_error": "no_target_file"}, f)
+           sys.exit(0)
+
+      full_path = f"repo/{target_file}"
+
+      # SAFETY: Stop if file doesn't exist
+      if not os.path.exists(full_path):
+          print(f"❌ Error: File '{target_file}' not found in repo.")
+          with open("fix_result.json", "w") as f:
+              json.dump({"fix_successful": False, "last_error": "file_not_found"}, f)
+          sys.exit(0)
+
+      print(f"📄 Reading content of {full_path}...")
+      original_code = open(full_path).read()
+
+      # 5. AGENTIC GENERATION (Gemini 2.0 Flash)
+      print("🤖 Activating Agent to fix code...")
+      genai.configure(api_key=GEMINI_KEY)
+
+      prompt = f"""
+      You are an Autonomous Senior Software Engineer (Agent).
+
+      ## MISSION
+      Fix a confirmed bug in the following file.
+
+      ## CONTEXT
+      - **Repository:** {REPO}
+      - **File:** {target_file}
+      - **Root Cause Analysis:** {RCA.get('root_cause')}
+      - **Fix Plan:** {RCA.get('fix_plan')}
+
+      ## RULES
+      1. **Minimal Changes:** Only fix the specific bug. Do not refactor unrelated code.
+      2. **Preserve Integrity:** Keep all imports, class structures, and comments.
+      3. **Output Format:** Return ONLY the complete, valid source code. No markdown blocks.
+
+      ## ORIGINAL CODE
+      {original_code}
+      """
+
+      def get_agent_fix():
+          model = genai.GenerativeModel("models/gemini-2.0-flash")
+          try:
+              return model.generate_content(prompt).text
+          except Exception as e:
+              print(f"⚠️ Primary model failed: {e}. Trying fallback...")
+              model_fallback = genai.GenerativeModel("models/gemini-flash-latest")
+              return model_fallback.generate_content(prompt).text
+
+      fixed_code_raw = get_agent_fix()
+
+      # 6. Clean Output
+      clean_code = re.sub(r'^```[a-z]*\n', '', fixed_code_raw, flags=re.MULTILINE)
+      clean_code = re.sub(r'\n```$', '', clean_code, flags=re.MULTILINE).strip()
+
+      # 7. Write & Verify
+      with open(full_path, "w") as f:
+          f.write(clean_code)
+
+      print(f"✅ Applied fix to {target_file}")
+
+      # 8. Commit & Push
+      FIX_BRANCH = f"fix/ai-heal-{int(time.time())}"
+
+      subprocess.call(["git", "-C", "repo", "checkout", "-b", FIX_BRANCH])
+      subprocess.call(["git", "-C", "repo", "add", target_file])
+      subprocess.call(["git", "-C", "repo", "commit", "-m", f"AI Fix: {str(RCA.get('root_cause', 'Fix'))[:50]}..."])
+
+      print(f"📤 Pushing branch {FIX_BRANCH}...")
+      push_result = subprocess.call(["git", "-C", "repo", "push", git_url, FIX_BRANCH])
+
+      # 9. Output Result
+      result = {
+          "fix_successful": True,
+          "push_successful": (push_result == 0),
+          "fix_branch": FIX_BRANCH,
+          "base_branch": BRANCH,
+          "last_error": "" if push_result == 0 else "push_failed"
+      }
+
+      with open("fix_result.json", "w") as f:
+          json.dump(result, f)
+
+  # -------------------------------------------------------------
+  # 2. CHECK STATUS
+  # -------------------------------------------------------------
+  - id: check_fix_result
+    type: io.kestra.plugin.scripts.python.Script
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      image: python:3.11-slim
+    inputFiles:
+      fix_result.json: "{{ outputs.clone_and_fix.outputFiles['fix_result.json'] }}"
+    outputFiles:
+      - workflow_status.json
+    script: |
+      import json
+      try:
+          with open("fix_result.json", "r") as f: data = json.load(f)
+      except:
+          data = {"fix_successful": False, "last_error": "json_load_error"}
+
+      status = {
+          "status": "success" if data.get("fix_successful") and data.get("push_successful") else "failed",
+          "fix_branch": data.get("fix_branch"),
+          "base_branch": data.get("base_branch", "main"),
+          "last_error": data.get("last_error")
+      }
+      with open("workflow_status.json", "w") as f: json.dump(status, f)
+
+  # -------------------------------------------------------------
+  # 3. TRIGGER PR CREATION
+  # -------------------------------------------------------------
+  - id: trigger_pr_creation
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{ json(read(outputs.check_fix_result.outputFiles['workflow_status.json'])).status == 'success' }}"
+    then:
+      - id: call_pr_creator
+        type: io.kestra.plugin.core.flow.Subflow
+        namespace: company.self-healing
+        flowId: automated-pr-creator
+        inputs:
+          repository: "{{ inputs.repository }}"
+          base_branch: "{{ json(read(outputs.check_fix_result.outputFiles['workflow_status.json'])).base_branch }}"
+          fix_branch: "{{ json(read(outputs.check_fix_result.outputFiles['workflow_status.json'])).fix_branch }}"
+          github_token: "{{ inputs.github_token }}"
+          rca_json: "{{ inputs.rca_json }}"
+        wait: true
+    else:
+      - id: log_failure
+        type: io.kestra.plugin.core.log.Log
+        message: "❌ Fix failed. Error: {{ json(read(outputs.check_fix_result.outputFiles['workflow_status.json'])).last_error }}"

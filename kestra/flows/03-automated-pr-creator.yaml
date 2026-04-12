@@ -1,0 +1,161 @@
+id: automated-pr-creator
+namespace: company.self-healing
+
+description: |
+  Workflow #3: Automated PR Creation
+  Handles token validation and idempotent PR creation.
+
+inputs:
+  - id: repository
+    type: STRING
+    required: true
+  - id: base_branch
+    type: STRING
+    defaults: "main"
+  - id: fix_branch
+    type: STRING
+    required: true
+  - id: github_token
+    type: STRING
+    required: true
+  - id: rca_json
+    type: STRING
+    required: true
+  - id: fix_attempts
+    type: INT
+    defaults: 1
+  - id: parent_execution_id
+    type: STRING
+    defaults: ""
+
+tasks:
+  # ============================================
+  # STEP 0 — Validate GitHub Token
+  # ============================================
+  - id: validate_github_token
+    type: io.kestra.plugin.scripts.python.Script
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      image: python:3.11-slim
+      networkMode: host  # 👈 REQUIRED for your machine
+    beforeCommands:
+      - pip install --no-cache-dir PyGithub
+    env:
+      GITHUB_TOKEN: "{{ inputs.github_token }}"
+      REPOSITORY: "{{ inputs.repository }}"
+    script: |
+      import os
+      import sys
+      from github import Github
+
+      token = os.getenv("GITHUB_TOKEN")
+      repo_name = os.getenv("REPOSITORY")
+
+      if not token:
+          print("❌ Missing GitHub token.")
+          sys.exit(1)
+
+      print(f"🔍 Checking permissions for {repo_name}...")
+      try:
+          gh = Github(token)
+          repo = gh.get_repo(repo_name)
+          print(f"✅ Access confirmed: {repo.full_name}")
+      except Exception as e:
+          print(f"❌ Token Invalid or Repo Inaccessible: {e}")
+          sys.exit(1)
+
+  # ============================================
+  # STEP 1: Log Start
+  # ============================================
+  - id: initialize
+    type: io.kestra.plugin.core.log.Log
+    message: |
+      🚀 STARTING PR CREATION
+      Repo: {{ inputs.repository }} | Branch: {{ inputs.fix_branch }}
+
+  # ============================================
+  # STEP 2: Create Pull Request
+  # ============================================
+  - id: create_pull_request
+    type: io.kestra.plugin.scripts.python.Script
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      image: python:3.11-slim
+      networkMode: host  # 👈 REQUIRED for your machine
+    beforeCommands:
+      - pip install --no-cache-dir requests
+    env:
+      GITHUB_TOKEN: "{{ inputs.github_token }}"
+      REPOSITORY: "{{ inputs.repository }}"
+      BASE_BRANCH: "{{ inputs.base_branch }}"
+      FIX_BRANCH: "{{ inputs.fix_branch }}"
+      RCA_JSON: "{{ inputs.rca_json }}"
+    outputFiles:
+      - "pr_result.json"
+    script: |
+      import os, json, requests, sys
+
+      TOKEN = os.getenv("GITHUB_TOKEN")
+      REPO = os.getenv("REPOSITORY")
+      BASE = os.getenv("BASE_BRANCH")
+      HEAD = os.getenv("FIX_BRANCH")
+      
+      try:
+          rca = json.loads(os.getenv("RCA_JSON"))
+          root_cause = rca.get("root_cause", "Automated Fix")
+      except:
+          root_cause = "Automated Fix"
+
+      title = f"🤖 Self-Healing Fix: {root_cause}"
+      body = f"### 🤖 Automated Self-Healing PR\n\n**Reason:** {root_cause}\n\n_Generated automatically._"
+
+      url = f"https://api.github.com/repos/{REPO}/pulls"
+      headers = {"Authorization": f"token {TOKEN}", "Accept": "application/vnd.github.v3+json"}
+      payload = {"title": title, "body": body, "head": HEAD, "base": BASE}
+
+      print(f"🚀 Creating PR: {HEAD} -> {BASE}")
+      resp = requests.post(url, headers=headers, json=payload)
+      
+      pr_data = {}
+
+      if resp.status_code == 201:
+          data = resp.json()
+          print(f"✅ PR Created: {data['html_url']}")
+          pr_data = {"pr_created": True, "pr_number": data["number"], "pr_url": data["html_url"]}
+      elif resp.status_code == 422 and "A pull request already exists" in resp.text:
+          print("⚠️ PR already exists. Fetching details...")
+          list_url = f"https://api.github.com/repos/{REPO}/pulls?head={REPO.split('/')[0]}:{HEAD}&base={BASE}"
+          list_resp = requests.get(list_url, headers=headers)
+          if list_resp.status_code == 200 and len(list_resp.json()) > 0:
+              data = list_resp.json()[0]
+              pr_data = {"pr_created": False, "pr_number": data["number"], "pr_url": data["html_url"]}
+          else:
+              print("❌ Could not find existing PR.")
+              sys.exit(1)
+      else:
+          print(f"❌ Error: {resp.status_code} - {resp.text}")
+          sys.exit(1)
+
+      with open("pr_result.json", "w") as f:
+          json.dump(pr_data, f)
+
+  # ============================================
+  # STEP 3: Trigger Auto-Merge
+  # ============================================
+  - id: trigger_auto_merge
+    type: io.kestra.plugin.core.flow.Subflow
+    namespace: company.self-healing
+    flowId: auto-merge-validator
+    wait: false
+    transmitFailed: false
+    inputs:
+      repository: "{{ inputs.repository }}"
+      # ✅ Correctly passes the PR number extracted from the previous step
+      pr_number: "{{ json(read(outputs.create_pull_request.outputFiles['pr_result.json'])).pr_number }}"
+      github_token: "{{ inputs.github_token }}"
+      parent_execution_id: "{{ execution.id }}"
+
+outputs:
+  - id: pr_result
+    type: STRING
+    value: "{{ read(outputs.create_pull_request.outputFiles['pr_result.json']) }}"
