@@ -16,7 +16,7 @@ def divide(a, b):
     return a / b
 
 def power(a, b):
-    
+    # The calculation logic was incorrect, it was performing XOR operation instead of exponentiation
     return a ** b
 
 if __name__ == "__main__":
@@ -47,7 +47,6 @@ if __name__ == "__main__":
     try:
         assert power(2, 3) == 8
     except AssertionError:
-        # Returns 1 (XOR) instead of 8
         print(f"❌ Test Failed: power(2, 3) returned {power(2, 3)}, expected 8")
         exit(1)
 
