@@ -16,14 +16,17 @@ from calc import add, subtract, multiply, divide, power
 class TestAddition:
     def test_add_positive_numbers(self):
         assert add(2, 3) == 5
+        assert add(2, 3) == 5
         assert add(10, 5) == 15
 
 class TestSubtraction:
     def test_subtract_positive_numbers(self):
         assert subtract(10, 3) == 7
+        assert subtract(10, 3) == 7
 
 class TestMultiplication:
     def test_multiply_positive_numbers(self):
+        assert multiply(3, 4) == 12
         assert multiply(3, 4) == 12
 
 class TestDivision:
@@ -38,4 +41,5 @@ class TestPower:
     """Test cases for the new power function"""
     def test_power_positive(self):
         # This will FAIL because your code uses ^ (XOR) instead of ** (Power)
+        assert power(2, 3) == 8
         assert power(2, 3) == 8
