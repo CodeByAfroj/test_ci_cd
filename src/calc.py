@@ -1,6 +1,6 @@
 def add(a, b):
     
-    return 1
+    return a + b
 
 def subtract(a, b):
 
@@ -47,7 +47,6 @@ if __name__ == "__main__":
     try:
         assert power(2, 3) == 8
     except AssertionError:
-        # Returns 1 (XOR) instead of 8
         print(f"❌ Test Failed: power(2, 3) returned {power(2, 3)}, expected 8")
         exit(1)
 
