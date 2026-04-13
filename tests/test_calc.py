@@ -16,6 +16,7 @@ from calc import add, subtract, multiply, divide, power
 class TestAddition:
     def test_add_positive_numbers(self):
         assert add(2, 3) == 5
+assert add(10, 5) == 15
         assert add(10, 5) == 15
 
 class TestSubtraction:
