@@ -10,7 +10,7 @@ def divide(a, b):
     return a / b
 
 def power(a, b):
-    return a *
+    return a 
 
 if __name__ == "__main__":d
     print("\u0127 Running internal tests...")
