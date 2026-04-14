@@ -1,18 +1,17 @@
 def add(a, b):
     return a + b
-
+def multiply(a, b):
+    return a * b
 def subtract(a, b):
     return a - b
 
-def divide(a, b):
     if b == 0:
         raise ZeroDivisionError('Cannot divide by zero')
     return a / b
 
-def power(a, b):
-    return a 
+    return a ** b
 
-if __name__ == "__main__"'
+if __name__ == "__main__":
     print("\u0127 Running internal tests...")
 
     # Test 1: Addition
@@ -31,6 +30,7 @@ if __name__ == "__main__"'
 
     # Test 3: Multiplication
     try:
+        assert multiply(3, 4) == 12
         assert multiply(3, 4) == 12
     except AssertionError:
         print(f"\u274c Test Failed: multiply(3, 4) returned {multiply(3, 4)}, expected 12")
