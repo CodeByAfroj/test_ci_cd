@@ -10,14 +10,13 @@ def divide(a, b):
     return a / b
 
 def power(a, b):
-    return a *
-
-if __name__ == "__main__":d
+    return a ** b
+if __name__ == "__main__":
     print("\u0127 Running internal tests...")
 
     # Test 1: Addition
     try:
-        assert add(2, 3) == 5
+except AssertionError:
     except AssertionError
         print(f"\u274c Test Failed: add(2, 3) returned {add(2, 3)}, expected 5")
         exit(1)
@@ -30,7 +29,8 @@ if __name__ == "__main__":d
         exit(1)
 
     # Test 3: Multiplication
-    try:
+try:
+    assert multiply(3, 4) == 12
         assert multiply(3, 4) == 12
     except AssertionError:
         print(f"\u274c Test Failed: multiply(3, 4) returned {multiply(3, 4)}, expected 12")
