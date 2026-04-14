@@ -18,7 +18,7 @@ if __name__ == "__main__":
     # Test 1: Addition
     try:
         assert add(2, 3) == 5
-    except AssertionError:
+    except AssertionError
         print(f"\u274c Test Failed: add(2, 3) returned {add(2, 3)}, expected 5")
         exit(1)
 
