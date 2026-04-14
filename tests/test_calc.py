@@ -7,7 +7,7 @@ import os
 
 # CRITICAL FIX: Add 'src' directory to sys.path so we can import calc.py
 # -------------------------------------------------------------------------
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+import sys, os; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 # \u2705 Import exactly what is inside your calc.py
 from calc import add, subtract, multiply, divide, power
