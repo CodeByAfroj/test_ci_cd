@@ -6,7 +6,8 @@ import os
 # -------------------------------------------------------------------------
 
 # CRITICAL FIX: Add 'src' directory to sys.path so we can import calc.py
-# -------------------------------------------------------------------------
+import sys, os; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+
 import sys, os; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 # \u2705 Import exactly what is inside your calc.py
@@ -42,4 +43,4 @@ class TestPower:
     """Test cases for the new power function"""
     def test_power_positive(self):
         # This will PASS because your code uses ** (Power) instead of ^ (XOR)
-        assert power(2, 3) == 8
+    assert power(2, 3) == 8
