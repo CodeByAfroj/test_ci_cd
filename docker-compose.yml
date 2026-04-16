@@ -11,7 +11,13 @@ services:
       - 1.1.1.1
 
     environment:
-      # API Keys - passed from host environment or .env file
+  
+  # Database connection settings
+  POSTGRES_HOST: 'localhost'
+  POSTGRES_USER: 'postgres'
+  POSTGRES_PASSWORD: 'postgres'
+  POSTGRES_DB: 'test_ci_cd'
+
       GEMINI_API_KEY: "${GEMINI_API_KEY}"
       GITHUB_TOKEN: "${GITHUB_TOKEN}"
       
