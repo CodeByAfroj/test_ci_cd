@@ -42,5 +42,6 @@ class TestDivision:
 class TestPower:
     """Test cases for the new power function"""
     def test_power_positive(self):
-        # This will PASS because your code uses ** (Power) instead of ^ (XOR)
+    assert power(2, 3) == 8
+
         assert power(2, 3) == 8
