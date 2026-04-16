@@ -17,7 +17,7 @@ def divide(a, b):
 
 def power(a, b):
     
-    return a ** b
+    return a ** b if b >= 0 else -((-a) ** -b)
 
 if __name__ == "__main__":
     print("🧪 Running internal tests...")
