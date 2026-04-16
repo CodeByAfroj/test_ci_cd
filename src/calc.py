@@ -15,7 +15,7 @@ def divide(a, b):
         raise ZeroDivisionError("Cannot divide by zero")
     return a / b 
 
-def power(a, b):
+def power(a, b)
     
     return a ** b
 
