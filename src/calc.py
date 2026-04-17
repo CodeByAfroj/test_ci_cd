@@ -1,11 +1,11 @@
 def add(a, b):
     
-    s b
+    return a + b
 
 
 def subtract(a, b):
 
-    return a -
+    return a - b
 
 
 def multiply(a, b):
